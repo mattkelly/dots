@@ -51,8 +51,8 @@
       score: 0,
       lastT: performance.now(),
       nextSpawnAt: 0,
-      spawnEvery: 3000,     // ms (will decrease over time)
-      gravity: 160,         // px/s^2
+      spawnEvery: 3500,     // ms (will decrease over time)
+      gravity: 120,         // px/s^2
       tapBoost: 220,        // instantaneous upward velocity
       dots: [],
     };
@@ -63,8 +63,8 @@
       state.running = true;
       state.score = 0;
       state.lastT = performance.now();
-      state.spawnEvery = 3000;
-      state.gravity = 160;
+      state.spawnEvery = 3500;
+      state.gravity = 120;
       state.nextSpawnAt = performance.now() + 500;
       state.dots = [makeDot()];
       resetBtn.classList.remove("visible");
@@ -79,7 +79,7 @@
         x: rand(r + 8, W - r - 8),
         y: rand(r + 8, H * 0.35),
         r,
-        vy: rand(0, 40),         // starting downward drift
+        vy: rand(0, 20),         // starting downward drift
         hue: rand(170, 330),
       };
     }
