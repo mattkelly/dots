@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Falling Dots</title>
   <style>
-    html, body { height: 100%; margin: 0; background: #0b0d12; color: #e9eefc; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    html, body { height: 100%; margin: 0; overflow: hidden; background: #0b0d12; color: #e9eefc; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
     #wrap { height: 100%; display: grid; place-items: center; }
     canvas { width: min(95vw, 520px); height: min(92vh, 820px); background: #111528; border-radius: 18px; box-shadow: 0 10px 40px rgba(0,0,0,.45); touch-action: manipulation; }
     #hud {
@@ -15,14 +15,16 @@
     }
     .pill { pointer-events: auto; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12); padding: 8px 12px; border-radius: 999px; backdrop-filter: blur(8px); }
     button { cursor: pointer; color: inherit; }
+    #reset { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 16px 36px; font-size: 20px; z-index: 10; }
+    #reset.visible { display: block; }
   </style>
 </head>
 <body>
   <div id="hud">
     <div class="pill">Score: <span id="score">0</span></div>
-    <button class="pill" id="reset">Reset</button>
     <div class="pill">Dots: <span id="dots">1</span></div>
   </div>
+  <button class="pill" id="reset">Reset (Enter)</button>
   <div id="wrap"><canvas id="c"></canvas></div>
 
   <script>
@@ -49,9 +51,9 @@
       score: 0,
       lastT: performance.now(),
       nextSpawnAt: 0,
-      spawnEvery: 2200,     // ms (will decrease over time)
-      gravity: 260,         // px/s^2
-      tapBoost: 260,        // instantaneous upward velocity
+      spawnEvery: 3000,     // ms (will decrease over time)
+      gravity: 160,         // px/s^2
+      tapBoost: 220,        // instantaneous upward velocity
       dots: [],
     };
 
@@ -61,16 +63,18 @@
       state.running = true;
       state.score = 0;
       state.lastT = performance.now();
-      state.spawnEvery = 2200;
+      state.spawnEvery = 3000;
+      state.gravity = 160;
       state.nextSpawnAt = performance.now() + 500;
       state.dots = [makeDot()];
+      resetBtn.classList.remove("visible");
       updateHud();
     }
 
     function makeDot() {
       const rect = canvas.getBoundingClientRect();
       const W = rect.width, H = rect.height;
-      const r = rand(10, 18);
+      const r = rand(18, 28);
       return {
         x: rand(r + 8, W - r - 8),
         y: rand(r + 8, H * 0.35),
@@ -81,12 +85,13 @@
     }
 
     function updateHud() {
-      scoreEl.textContent = Math.floor(state.score);
+      scoreEl.textContent = state.score;
       dotsEl.textContent = state.dots.length;
     }
 
     function endGame() {
       state.running = false;
+      resetBtn.classList.add("visible");
     }
 
     // --- Input: tap/click to boost a dot you hit ---
@@ -114,7 +119,7 @@
       const d = state.dots[i];
       d.vy = Math.min(d.vy, 0);     // cancel downward momentum
       d.vy -= state.tapBoost;       // kick upward
-      state.score += 3;             // reward accuracy
+      state.score += 1;
       updateHud();
     }
 
@@ -127,6 +132,7 @@
 
     canvas.addEventListener("pointerdown", onPointer);
     resetBtn.addEventListener("click", reset);
+    window.addEventListener("keydown", (e) => { if (e.key === "Enter") reset(); });
 
     // --- Loop ---
     function step(t) {
@@ -146,9 +152,6 @@
           updateHud();
         }
 
-        // score ticks up while alive
-        state.score += dt * 2;
-        updateHud();
       }
 
       // physics
@@ -191,9 +194,7 @@
         ctx.fillStyle = "rgba(255,255,255,0.95)";
         ctx.font = "700 28px system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
         ctx.textAlign = "center";
-        ctx.fillText("Game Over", W/2, H/2 - 10);
-        ctx.font = "500 16px system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
-        ctx.fillText("Click Reset to try again", W/2, H/2 + 18);
+        ctx.fillText("Game Over", W/2, H/2 - 40);
       }
 
       requestAnimationFrame(step);
