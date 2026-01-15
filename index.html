@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Falling Dots</title>
+  <style>
+    html, body { height: 100%; margin: 0; background: #0b0d12; color: #e9eefc; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    #wrap { height: 100%; display: grid; place-items: center; }
+    canvas { width: min(95vw, 520px); height: min(92vh, 820px); background: #111528; border-radius: 18px; box-shadow: 0 10px 40px rgba(0,0,0,.45); touch-action: manipulation; }
+    #hud {
+      position: fixed; top: 12px; left: 12px; right: 12px;
+      display: flex; gap: 10px; justify-content: space-between; align-items: center;
+      pointer-events: none; font-weight: 600;
+    }
+    .pill { pointer-events: auto; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12); padding: 8px 12px; border-radius: 999px; backdrop-filter: blur(8px); }
+    button { cursor: pointer; color: inherit; }
+  </style>
+</head>
+<body>
+  <div id="hud">
+    <div class="pill">Score: <span id="score">0</span></div>
+    <button class="pill" id="reset">Reset</button>
+    <div class="pill">Dots: <span id="dots">1</span></div>
+  </div>
+  <div id="wrap"><canvas id="c"></canvas></div>
+
+  <script>
+    // --- Setup canvas in device pixels ---
+    const canvas = document.getElementById("c");
+    const ctx = canvas.getContext("2d");
+    const scoreEl = document.getElementById("score");
+    const dotsEl = document.getElementById("dots");
+    const resetBtn = document.getElementById("reset");
+
+    function resize() {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+      canvas.width  = Math.floor(rect.width * dpr);
+      canvas.height = Math.floor(rect.height * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // draw in CSS pixels
+    }
+    window.addEventListener("resize", resize);
+    resize();
+
+    // --- Game state ---
+    const state = {
+      running: true,
+      score: 0,
+      lastT: performance.now(),
+      nextSpawnAt: 0,
+      spawnEvery: 2200,     // ms (will decrease over time)
+      gravity: 260,         // px/s^2
+      tapBoost: 260,        // instantaneous upward velocity
+      dots: [],
+    };
+
+    function rand(min, max) { return min + Math.random() * (max - min); }
+
+    function reset() {
+      state.running = true;
+      state.score = 0;
+      state.lastT = performance.now();
+      state.spawnEvery = 2200;
+      state.nextSpawnAt = performance.now() + 500;
+      state.dots = [makeDot()];
+      updateHud();
+    }
+
+    function makeDot() {
+      const rect = canvas.getBoundingClientRect();
+      const W = rect.width, H = rect.height;
+      const r = rand(10, 18);
+      return {
+        x: rand(r + 8, W - r - 8),
+        y: rand(r + 8, H * 0.35),
+        r,
+        vy: rand(0, 40),         // starting downward drift
+        hue: rand(170, 330),
+      };
+    }
+
+    function updateHud() {
+      scoreEl.textContent = Math.floor(state.score);
+      dotsEl.textContent = state.dots.length;
+    }
+
+    function endGame() {
+      state.running = false;
+    }
+
+    // --- Input: tap/click to boost a dot you hit ---
+    function pointerPos(ev) {
+      const rect = canvas.getBoundingClientRect();
+      const x = (ev.clientX - rect.left);
+      const y = (ev.clientY - rect.top);
+      return { x, y };
+    }
+
+    function hitTest(x, y) {
+      // hit the closest dot under pointer
+      let best = -1;
+      let bestD2 = Infinity;
+      for (let i = 0; i < state.dots.length; i++) {
+        const d = state.dots[i];
+        const dx = x - d.x, dy = y - d.y;
+        const d2 = dx*dx + dy*dy;
+        if (d2 <= d.r*d.r && d2 < bestD2) { best = i; bestD2 = d2; }
+      }
+      return best;
+    }
+
+    function boostDot(i) {
+      const d = state.dots[i];
+      d.vy = Math.min(d.vy, 0);     // cancel downward momentum
+      d.vy -= state.tapBoost;       // kick upward
+      state.score += 3;             // reward accuracy
+      updateHud();
+    }
+
+    function onPointer(ev) {
+      if (!state.running) return;
+      const { x, y } = pointerPos(ev);
+      const i = hitTest(x, y);
+      if (i !== -1) boostDot(i);
+    }
+
+    canvas.addEventListener("pointerdown", onPointer);
+    resetBtn.addEventListener("click", reset);
+
+    // --- Loop ---
+    function step(t) {
+      const rect = canvas.getBoundingClientRect();
+      const W = rect.width, H = rect.height;
+      const dt = Math.min(0.033, (t - state.lastT) / 1000); // cap dt
+      state.lastT = t;
+
+      // difficulty ramp + spawns
+      if (state.running) {
+        if (t >= state.nextSpawnAt) {
+          state.dots.push(makeDot());
+          // gradually spawn faster + slightly increase gravity (subtle)
+          state.spawnEvery = Math.max(600, state.spawnEvery * 0.94);
+          state.gravity = Math.min(520, state.gravity * 1.01);
+          state.nextSpawnAt = t + state.spawnEvery;
+          updateHud();
+        }
+
+        // score ticks up while alive
+        state.score += dt * 2;
+        updateHud();
+      }
+
+      // physics
+      for (const d of state.dots) {
+        if (state.running) d.vy += state.gravity * dt;
+        d.y += d.vy * dt;
+
+        // keep within top bounds
+        if (d.y < d.r) { d.y = d.r; d.vy = Math.max(0, d.vy); }
+
+        // lose if any dot hits bottom
+        if (state.running && d.y + d.r >= H) {
+          d.y = H - d.r;
+          endGame();
+        }
+      }
+
+      // draw
+      ctx.clearRect(0, 0, W, H);
+
+      // background vignette
+      const g = ctx.createRadialGradient(W/2, H/3, 30, W/2, H/2, Math.max(W,H));
+      g.addColorStop(0, "rgba(255,255,255,0.06)");
+      g.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+
+      // dots
+      for (const d of state.dots) {
+        ctx.beginPath();
+        ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
+        ctx.fillStyle = `hsl(${d.hue} 90% 60%)`;
+        ctx.fill();
+      }
+
+      // game over overlay
+      if (!state.running) {
+        ctx.fillStyle = "rgba(0,0,0,0.45)";
+        ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = "rgba(255,255,255,0.95)";
+        ctx.font = "700 28px system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("Game Over", W/2, H/2 - 10);
+        ctx.font = "500 16px system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
+        ctx.fillText("Click Reset to try again", W/2, H/2 + 18);
+      }
+
+      requestAnimationFrame(step);
+    }
+
+    reset();
+    requestAnimationFrame(step);
+  </script>
+</body>
+</html>
+
